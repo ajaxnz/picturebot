@@ -1,6 +1,6 @@
 import random
+random.seed()
 import re
-import math
 
 from discord.ext import commands
 import discord
@@ -11,16 +11,8 @@ import credentials
 ## permissions
 ## read_message_history (to delete input messages)
 
-GLOBALstate = {
-    'trustchannels':{}}
+GLOBALstate = {}
 
-DEFAULTDIEFACES = [
-    'Profession',
-    'Past',
-    'Side Job',
-    'Special Thing'
-]
-FAILUREFACES = ['????', '!!!!']
 
 
 description = '''PictureDice (tm) die rolling and trust bot.
@@ -36,6 +28,20 @@ async def on_ready():
     print(bot.user.id)
     print('------')
 
+
+@bot.event
+async def on_command_error(error, ctx):
+    if isinstance(error, commands.MissingRequiredArgument):
+        await ctx.send(ctx.message.channel, "I don't understand. Use .help for more info.")
+
+
+#####
+#####
+#####
+#####
+#####
+#####
+#####  Trust related functions
 
 
 def printTrust(ctx):
@@ -59,7 +65,7 @@ def getUser(ctx, username):
 
 
 @bot.command()
-async def truststart(ctx, totaltrust: int, role_or_player: str,
+async def setuptrust(ctx, totaltrust: int, role_or_player: str,
                      player2:str=None,
                      player3:str=None,
                      player4:str=None,
@@ -72,7 +78,7 @@ async def truststart(ctx, totaltrust: int, role_or_player: str,
                      ):
     """Set up trust in this channel for users or role.
 total trust <value>
-rolename or list of @users"""
+name of a role or list of @users"""
 
     try:
         state = {}
@@ -128,18 +134,13 @@ rolename or list of @users"""
         await ctx.send(printTrust(ctx))
 
 
-
-
-
     except Exception as e:
-        print(e)
-        return
+        print('setuptrust',e)
 
-##TODO trustset @user int
 
 @bot.command()
-async def trustset(ctx, username:str, newtrust:int):
-    """For the GM to set player <X> trust to <value>"""
+async def trustset(ctx, player:str, newtrust:int):
+    """For the GM to set player <@X> trust to <value>"""
 
     # find user (leading letters, if unique
     # send trust
@@ -150,11 +151,11 @@ async def trustset(ctx, username:str, newtrust:int):
         state = GLOBALstate.setdefault(ctx.channel.name,{})
 
         if not state.get('trust'):
-            await ctx.send(ctx.message.author.mention + " trust is not set up. The GM can set it up using .truststart")
+            await ctx.send(ctx.message.author.mention + " trust is not set up. The GM can set it up using .setuptrust")
             return
 
         ## find the sendee - the person trusted
-        sendee = getUser(ctx, username)
+        sendee = getUser(ctx, player)
         if not sendee:
             await ctx.send(ctx.message.author.mention + " @ the person whose trust you are trying to change")
             return
@@ -184,8 +185,7 @@ async def trustset(ctx, username:str, newtrust:int):
 
 
     except Exception as e:
-        print(e)
-        return
+        print('trustset',e)
 
 
 @bot.command()
@@ -198,25 +198,25 @@ async def trustremove(ctx, username:str):
 
 
 @bot.command()
-async def trust(ctx, username:str=''):
+async def trust(ctx, player:str=None):
     """Sends user <x> a trust"""
 
     try:
         state = GLOBALstate.setdefault(ctx.channel.name,{})
         if not state.get('trust'):
-            await ctx.send(ctx.message.author.mention + " trust is not set up. The GM can set it up using .truststart")
+            await ctx.send(ctx.message.author.mention + " trust is not set up. The GM can set it up using .setuptrust")
             return
 
-        if not username:
+        if not player:
             await ctx.send(printTrust(ctx))
             await ctx.message.delete()
             return
 
         # find the destination user
-        sendee = getUser(ctx, username)
+        sendee = getUser(ctx, player)
         if not sendee:
             await ctx.send(ctx.message.author.mention + " @ the person you want to trust")
-            print('failed to find',username)
+            print('failed to find', player)
             return
 
         ## syntactically correct, so carry on
@@ -230,14 +230,13 @@ async def trust(ctx, username:str=''):
             if sender.name == state.get('gm'):
                 fromGM = True
             else:
-                await ctx.send(ctx.message.author.mention + " you aren't set up with trust. Do you have the right role - {}? or your GM can fix it with .trustset".format(
+                await ctx.send(ctx.message.author.mention + " you aren't set up with trust. Your GM can add you in with .trustset".format(
                         state.get('role')
                 ))
                 return
         elif state['trust'][sender.name]<1:
             await ctx.send(ctx.message.author.mention + " you have no trust. No-one can help you now")
             return
-
 
         # find the person being trusted
         if sendee.name not in state['trust']:
@@ -278,54 +277,159 @@ async def trust(ctx, username:str=''):
         await ctx.send(printTrust(ctx))
 
     except Exception as e:
-        print('Exception',e)
-        return
+        print('trust',e)
+
+
+
+
+
+
+
+
+#####
+#####
+#####
+#####
+#####
+#####
+#####  Picturedice related functions
+
+
+DEFAULTDIEFACES = [
+    'Profession',
+    'Past',
+    'Side Job',
+    'Special'
+]
+FAILUREFACES = ['????', '!!!!']
+
 
 
 @bot.command()
-async def rp(ctx):
-    """Rolls both picture dice, when you try something awesome!"""
+async def setuppicturedice(ctx, diename:str, face1:str, face2:str, face3:str, face4:str, failure1:str=None, failure2:str=None):
+    """Sets the labels for the dice.
+Give a name so you can customise the dice for your game, or even labels per person for serious personalisation
+Use 'default' as a die name to change the default"""
     await ctx.message.delete()
 
-    result1 = rollPictureDie(1)
-    result2 = rollPictureDie(2)
-    if result1 in FAILUREFACES and result1==result2:
-        await ctx.send(ctx.message.author.mention + " failed, badly. Double **{}**".format(result1))
-    elif result1 in FAILUREFACES and result2 in FAILUREFACES:
-        await ctx.send(ctx.message.author.mention + " failed, badly. **{}** and **{}**".format(result1, result2))
-    elif result1 in FAILUREFACES or result2 in FAILUREFACES:
-        await ctx.send(ctx.message.author.mention + " succeeded, partly. **{}** but also **{}**".format(result1, result2))
-    elif result1 == result2:
-        await ctx.send(ctx.message.author.mention + " double succeeded! **{}**".format(result1))
-    else:
-        await ctx.send(ctx.message.author.mention + " succeeded! **{}** or **{}** ".format(result1, result2))
+    state = GLOBALstate.setdefault(ctx.channel.name,{})
+    if not diename or diename =='0':
+        diename = 'default'
+
+    thisdie = state.setdefault('dice',{})[diename] = [face1, face2, face3, face4]+FAILUREFACES
+    if failure1:
+        thisdie[4] = failure1
+    if failure2:
+        thisdie[5] = failure2
+    await ctx.send(ctx.message.author.mention + " setup picturedice {} as {}".format(
+            diename, ' '.join(thisdie)))
+
+@bot.command()
+async def showpicturedice(ctx):
+    """Show the picture dice sets defined"""
+    try:
+        await ctx.message.delete()
+
+        state = GLOBALstate.setdefault(ctx.channel.name,{})
+        picturedicestring = ''
+        for diename, diefaces in state.get('dice',{}).items():
+            picturedicestring+='**{}**: {}\n'.format(diename, ' '.join(diefaces))
+        picturedicestring+='system default: {}'.format(' '.join(DEFAULTDIEFACES+FAILUREFACES))
+
+        await ctx.send("Current picture dice sets are\n"+picturedicestring)
+    except Exception as e:
+        print('picturediceshow',e)
+
+
+
+
 
 
 @bot.command()
-async def rh(ctx, dienumber:int=0):
-    """Rolls one picture die, for helping someone. Optional die number."""
+async def rp(ctx, die1:str=None, die2:str=None):
+    """Rolls both picture dice, when you do something
+Give die names you've set up with picturedicesetup for personalised dice, it'll remember the last pair you rolled"""
+    try:
+        await ctx.message.delete()
+        state = GLOBALstate.setdefault(ctx.channel.name,{})
+        lastd1,lastd2 = state.get('lastrp',{}).get(ctx.message.author.name,(None,None))
+
+        if lastd1 and not die1:
+            die1 = lastd1
+        if lastd2 and not die2:
+            die2 = lastd2
+        if die1 or die2:
+            state.setdefault('lastrp', {})[ctx.message.author.name] =  (die1, die2)
+
+        result1, fail1= rollPictureDie(ctx, die1)
+        result2, fail2= rollPictureDie(ctx, die2)
+        if fail1 and fail2 and result1==result2:
+            await ctx.send(ctx.message.author.mention + " failed, badly. Double **{}**".format(result1))
+        elif fail1 and fail2:
+            await ctx.send(ctx.message.author.mention + " failed, badly. **{}** and **{}**".format(result1, result2))
+        elif fail1 or fail2:
+            await ctx.send(ctx.message.author.mention + " succeeded, partly. **{}** but also **{}**".format(result1, result2))
+        elif result1 == result2:
+            await ctx.send(ctx.message.author.mention + " double succeeded! **{}**".format(result1))
+        else:
+            await ctx.send(ctx.message.author.mention + " succeeded! **{}** or **{}** ".format(result1, result2))
+    except Exception as e:
+        print('rp',e)
+
+
+@bot.command()
+async def rh(ctx, die:str=None):
+    """Rolls one picture die, for helping someone.
+Supply a die name to use that instead of the default, it'll remember what you rolled last"""
     await ctx.message.delete()
+    state = GLOBALstate.setdefault(ctx.channel.name,{})
+    lastd = state.get('lastrh', {}).get(ctx.message.author.name)
+
+    if lastd and not die:
+        die = lastd
+    if die:
+        state.setdefault('lastrh', {})[ctx.message.author.name] = die
 
     ## roll one picture dice - when helping someone
-    result = rollPictureDie(ctx, dienumber)
-    if result in FAILUREFACES:
+    result, fail = rollPictureDie(ctx, die)
+    if fail:
         await ctx.send(ctx.message.author.mention + " tried to help, but made things worse. **{}**".format(result))
     else:
         await ctx.send(ctx.message.author.mention + " successfully helped with: **{}**".format(result))
 
 
-def rollPictureDie(ctx, dienumber):
+def rollPictureDie(ctx, diename):
+    if not diename:
+        diename = 'default'
     state = GLOBALstate.get(ctx.channel.name)
-    diefaces = state.get('dice',{}).get(dienumber, DEFAULTDIEFACES)
-    diefaces = diefaces + FAILUREFACES
+    diefaces = DEFAULTDIEFACES + FAILUREFACES
+    for thisdie, thesediefaces in state.get('dice',{}).items():
+        if thisdie.lower()=='default':
+            diefaces = thesediefaces
+            break
+    for thisdie, thesediefaces in state.get('dice',{}).items():
+        if thisdie.lower()==diename.lower():
+            diefaces = thesediefaces
+            break
 
-    return random.choice(diefaces)
+    rollnum = random.randint(0,5)
+    # print('rolling {} ({}) got {}'.format(diename, diefaces, rollnum))
 
 
-@bot.event
-async def on_command_error(error, ctx):
-    if isinstance(error, commands.MissingRequiredArgument):
-        await ctx.send(ctx.message.channel, 'Usage: `.r #d#` e.g. `.r 1d20`\nUse .help for more info.')
+    return diefaces[rollnum], rollnum>=4
+
+
+
+
+
+#####
+#####
+#####
+#####
+#####
+#####
+#####  Boring dice with numbers related functions
+
 
 async def delete_messages(message, author):
     async for historicMessage in message.channel.history():
@@ -382,7 +486,7 @@ async def r(ctx, roll: str):
                 ctx.message.author.mention + "  :game_die:\n**Result:** " + resultString + "\n**Total:** " + str(resultTotal))
 
         state = GLOBALstate.setdefault(ctx.channel.name,{})
-        state['lastroll'] = roll
+        state.setdefault('lastroll',{})[ctx.message.author.name] = roll
     except Exception as e:
         print(e)
         return
@@ -390,9 +494,10 @@ async def r(ctx, roll: str):
 
 @bot.command()
 async def rr(ctx):
-    """rerolls the last thing"""
+    """rerolls the last boring numbered dice you rolled"""
     state = GLOBALstate.setdefault(ctx.channel.name, {})
-    roll = state.get('lastroll','')
+    roll = state.get('lastroll', {}).get(ctx.message.author.name,'')
+
     await r(ctx, roll)
 
 
