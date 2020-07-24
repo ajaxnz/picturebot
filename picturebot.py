@@ -1,7 +1,9 @@
 import random
 import re
+import math
 
 from discord.ext import commands
+import discord
 
 import credentials
 
@@ -9,7 +11,8 @@ import credentials
 ## permissions
 ## read_message_history (to delete input messages)
 
-state = {}
+GLOBALstate = {
+    'trustchannels':{}}
 
 DEFAULTDIEFACES = [
     'Profession',
@@ -20,7 +23,9 @@ DEFAULTDIEFACES = [
 FAILUREFACES = ['????', '!!!!']
 
 
-description = '''PictureDice (tm) die rolling and trust bot.'''
+description = '''PictureDice (tm) die rolling and trust bot.
+
+Setup assumes the members of the game will have a role to identify them'''
 bot = commands.Bot(command_prefix='.', description=description)
 
 
@@ -33,58 +38,94 @@ async def on_ready():
 
 
 
-@bot.command()
-async def trustsetup(ctx, rolename: str, starttrust: float):
-    """Resets the trust for people in a <role> to <value>"""
+def printTrust(ctx):
+    state = GLOBALstate.setdefault(ctx.channel.name, {})
+    return "\n".join(
+            ["{}: {}".format(state['players'][p].display_name, int(t)) for p, t in state.get('trust',{}).items()])
 
-    ### TODO exclude self, as assume GM
-
-    ## get role
-    ## get list of people with rolename
-    ## assign default starting trust
-    ## print people
-    ## store state
+def getUser(ctx, username):
+    ## decodes the string username returns the user object
     try:
-        try:
-            roleidx = [r.name.lower() for r in ctx.me.roles].index(rolename.lower())
-            role =ctx.me.roles[roleidx]
-        except:
-            await ctx.send(ctx.message.author.mention + " role {} doens't appear to exist. Try one of {}".format(
-                    rolename, ", ".join([r.name for r in ctx.me.roles if not r.name.startswith("@")])))
-            return
+        # extract a member id
+        if not username.startswith("<@"):
+            raise
+
+        userid = username.replace("<@", "").replace(">", "").replace('!', '')
+        userid = int(userid)
+        user = ctx.guild.get_member(userid)
+        return user
+    except:
+        return None
+
+
+@bot.command()
+async def truststart(ctx, totaltrust: int, role_or_player: str,
+                     player2:str=None,
+                     player3:str=None,
+                     player4:str=None,
+                     player5:str=None,
+                     player6:str=None,
+                     player7:str=None,
+                     player8:str=None,
+                     player9:str=None,
+                     player10:str=None
+                     ):
+    """Set up trust in this channel for users or role.
+total trust <value>
+rolename or list of @users"""
+
+    try:
+        state = {}
+        GLOBALstate[ctx.channel.name] = state
+
+        if role_or_player.startswith('<@'):
+            players = []
+            for username in [role_or_player, player2,player3,player4,player5,player6,player7,player8,player9,player10]:
+                if username:
+                    user = getUser(ctx, username)
+                    if user:
+                        players.append(user)
+                    else:
+                        await ctx.send(ctx.message.author.mention + " user {} doesn't appear to exist. @ them?".format(
+                                username))
+                        return
+
+        else:
+            role = None
+            botRoles = {r.name:r for r in ctx.me.roles}
+            userRoles = {r.name:r for r in ctx.message.author.roles}
+            availableroles = {s for s in set(botRoles.keys()) | set(userRoles.keys()) if not s.startswith("@")}
+            for r in availableroles:
+                if r.lower() == role_or_player.lower():
+                    role = botRoles.get(r, userRoles.get(r))
+                    break
+            if not role:
+                await ctx.send(ctx.message.author.mention + " role {} doesn't appear to exist. Try {}".format(
+                        role_or_player, ", ".join(availableroles)))
+                return
+            players = [m for m in role.members if not m.bot and m.name != state['gm'] and m.status==discord.Status.online]
+            state['role']=role_or_player
         await ctx.message.delete()
         ctx.typing()
 
         state['gm']=ctx.message.author.name
-        state['role']=rolename
-
-
-        players = [m for m in role.members if not m.bot and m.name != state['gm']]
+        state['players'] = {p.name:p for p in players}
+        state['trust'] = {p.name:0 for p in players}
 
         numPlayers = len(players)
+        totaltrust = abs(totaltrust)
+        inttrust = totaltrust // numPlayers
+        for p in state['trust']:
+            state['trust'][p]+=int(inttrust)
 
-        playerTrust = {r.name:0 for r in players}
-
-        state['trust'] = playerTrust
-        if starttrust >0:
-            starttrust = starttrust * numPlayers
-        else:
-            starttrust = -starttrust
-        inttrust = starttrust // numPlayers
-        for p in playerTrust:
-            playerTrust[p]+=int(inttrust)
-
-        randomtrust = int(starttrust - (inttrust * numPlayers))
-        remainingExtraTrustPlayers = list(playerTrust.keys())
-        for i in range(randomtrust):
-            thisPlayer =random.choice(remainingExtraTrustPlayers)
-            playerTrust[thisPlayer]+=1
-            remainingExtraTrustPlayers.remove(thisPlayer)
+        randomtrust = int(totaltrust - (inttrust * numPlayers))
+        for p in random.sample(state['trust'].keys(),randomtrust):
+            state['trust'][p]+=1
 
         print(state)
 
-        await ctx.send("{} trust reset. You're the GM now".format(ctx.message.author.mention))
-        await printTrust(ctx)
+        await ctx.send("{} trust reset. You're the GM in this channel now".format(ctx.message.author.mention))
+        await ctx.send(printTrust(ctx))
 
 
 
@@ -97,8 +138,8 @@ async def trustsetup(ctx, rolename: str, starttrust: float):
 ##TODO trustset @user int
 
 @bot.command()
-async def trustchange(ctx, username:str, newtrust:int):
-    """Lets the GM sets player <X> trust to <value>"""
+async def trustset(ctx, username:str, newtrust:int):
+    """For the GM to set player <X> trust to <value>"""
 
     # find user (leading letters, if unique
     # send trust
@@ -106,52 +147,54 @@ async def trustchange(ctx, username:str, newtrust:int):
     # dm sender current trust
     # print all trusts to channel
     try:
-        playerTrust = state.get('trust',{})
+        state = GLOBALstate.setdefault(ctx.channel.name,{})
+
+        if not state.get('trust'):
+            await ctx.send(ctx.message.author.mention + " trust is not set up. The GM can set it up using .truststart")
+            return
 
         ## find the sendee - the person trusted
-        try:
-            # extract a member id
-            if not username.startswith("<@"):
-                raise
-
-            userid = username.replace("<@", "").replace(">", "").replace('!','')
-            userid = int(userid)
-            sendee = ctx.guild.get_member(userid)
-        except:
+        sendee = getUser(ctx, username)
+        if not sendee:
             await ctx.send(ctx.message.author.mention + " @ the person whose trust you are trying to change")
             return
         await ctx.message.delete()
         ctx.typing()
 
-        if not playerTrust:
-            await ctx.send(ctx.message.author.mention + " trust is not set up. Talk to your GM to do a .trustsetup")
-            return
 
         if ctx.message.author.name != state.get('gm'):
             await ctx.send(ctx.message.author.mention + " You are not the GM. {} is.".format(state.get('gm')))
             return
-        playerTrust[sendee.name]=newtrust
+        if newtrust == -231742:
+            if sendee.name in state['trust']:
+                state['trust'].pop(sendee.name,None)
+                state['players'].pop(sendee.name)
+                await ctx.send(ctx.message.author.mention + " removed " + sendee.mention + " from this trust pool")
+            else:
+                await ctx.send(ctx.message.author.mention + " tried to remove " + sendee.display_name + " but they don't exist.")
+        else:
+            newtrust = max(0,newtrust)
+            state['trust'][sendee.name]=newtrust
+            state['players'][sendee.name]=sendee
+            await ctx.send(sendee.mention+" The GM set your trust to {}".format(
+                  newtrust
+            ))
 
-        await ctx.send(sendee.mention+" The GM set your trust to {}".format(
-                newtrust
-        ))
-
-        await printTrust(ctx)
-
-
-
-
-
+        await ctx.send(printTrust(ctx))
 
 
     except Exception as e:
         print(e)
         return
 
-async def printTrust(ctx):
-    await ctx.send("\n".join(
-            ["{}: {}".format(p, int(t)) for p, t in state.get('trust',{}).items()])
-    )
+
+@bot.command()
+async def trustremove(ctx, username:str):
+    """For the GM to remove players from the current trust pool"""
+
+    await trustset(ctx, username, -231742)
+
+
 
 
 @bot.command()
@@ -159,22 +202,19 @@ async def trust(ctx, username:str=''):
     """Sends user <x> a trust"""
 
     try:
-        playerTrust = state.get('trust',{})
+        state = GLOBALstate.setdefault(ctx.channel.name,{})
+        if not state.get('trust'):
+            await ctx.send(ctx.message.author.mention + " trust is not set up. The GM can set it up using .truststart")
+            return
+
         if not username:
-            await printTrust(ctx)
+            await ctx.send(printTrust(ctx))
             await ctx.message.delete()
             return
 
         # find the destination user
-        try:
-            # extract a member id
-            if not username.startswith("<@"):
-                raise
-
-            userid = username.replace("<@", "").replace(">", "").replace('!','')
-            userid = int(userid)
-            sendee = ctx.guild.get_member(userid)
-        except:
+        sendee = getUser(ctx, username)
+        if not sendee:
             await ctx.send(ctx.message.author.mention + " @ the person you want to trust")
             print('failed to find',username)
             return
@@ -186,24 +226,21 @@ async def trust(ctx, username:str=''):
         # find the sender and their trust
         fromGM=False
         sender = ctx.message.author
-        if not playerTrust:
-            await ctx.send(ctx.message.author.mention + " trust is not set up. Talk to your GM to do a .trustsetup")
-            return
-        elif sender.name not in playerTrust:
+        if sender.name not in state['trust']:
             if sender.name == state.get('gm'):
                 fromGM = True
             else:
-                await ctx.send(ctx.message.author.mention + " you aren't set up with trust. Do you have the right role - {}? or your GM can fix it with .trustchange".format(
+                await ctx.send(ctx.message.author.mention + " you aren't set up with trust. Do you have the right role - {}? or your GM can fix it with .trustset".format(
                         state.get('role')
                 ))
                 return
-        elif playerTrust[sender.name]<1:
+        elif state['trust'][sender.name]<1:
             await ctx.send(ctx.message.author.mention + " you have no trust. No-one can help you now")
             return
 
 
         # find the person being trusted
-        if sendee.name not in playerTrust:
+        if sendee.name not in state['trust']:
             if sendee.name == state.get('gm') and fromGM:
                 await ctx.send(ctx.message.author.mention + " You are the GM. Why?"
                          )
@@ -213,9 +250,9 @@ async def trust(ctx, username:str=''):
                 ))
             else:
                 await ctx.send(ctx.message.author.mention + " {} isn't set up with trust. Try one of these".format(
-                        sendee.name
+                        sendee.display_name
                 ))
-                await printTrust(ctx)
+                await ctx.send(printTrust(ctx))
 
             return
 
@@ -223,28 +260,22 @@ async def trust(ctx, username:str=''):
         # send it, handling self & gm cases
         if sendee.name == sender.name:
             await ctx.send(ctx.message.author.mention + " trusted themselves. Selfish".format(
-                    sendee.mention, playerTrust[sender.name]
+                    sendee.mention, state['trust'][sender.name]
             ))
-            playerTrust[sender.name]-=1
+            state['trust'][sender.name]-=1
 
         elif fromGM:
             await ctx.send(sendee.mention + " the GM gave you trust. Do you trust them?")
-            playerTrust[sendee.name]+=1
+            state['trust'][sendee.name]+=1
 
         else:
-            playerTrust[sender.name]-=1
-            playerTrust[sendee.name]+=1
-            await ctx.send(ctx.message.author.mention + " trusted {}".format(
-                    sendee.mention, playerTrust[sender.name]
+            state['trust'][sender.name]-=1
+            state['trust'][sendee.name]+=1
+            await ctx.send(ctx.message.author.mention + " trusted {}. Will you help them?".format(
+                    sendee.mention
             ))
 
-        await printTrust(ctx)
-
-
-
-
-
-
+        await ctx.send(printTrust(ctx))
 
     except Exception as e:
         print('Exception',e)
@@ -276,14 +307,15 @@ async def rh(ctx, dienumber:int=0):
     await ctx.message.delete()
 
     ## roll one picture dice - when helping someone
-    result = rollPictureDie(dienumber)
+    result = rollPictureDie(ctx, dienumber)
     if result in FAILUREFACES:
         await ctx.send(ctx.message.author.mention + " tried to help, but made things worse. **{}**".format(result))
     else:
         await ctx.send(ctx.message.author.mention + " successfully helped with: **{}**".format(result))
 
 
-def rollPictureDie(dienumber):
+def rollPictureDie(ctx, dienumber):
+    state = GLOBALstate.get(ctx.channel.name)
     diefaces = state.get('dice',{}).get(dienumber, DEFAULTDIEFACES)
     diefaces = diefaces + FAILUREFACES
 
@@ -349,6 +381,7 @@ async def r(ctx, roll: str):
             await ctx.send(
                 ctx.message.author.mention + "  :game_die:\n**Result:** " + resultString + "\n**Total:** " + str(resultTotal))
 
+        state = GLOBALstate.setdefault(ctx.channel.name,{})
         state['lastroll'] = roll
     except Exception as e:
         print(e)
@@ -358,6 +391,7 @@ async def r(ctx, roll: str):
 @bot.command()
 async def rr(ctx):
     """rerolls the last thing"""
+    state = GLOBALstate.setdefault(ctx.channel.name, {})
     roll = state.get('lastroll','')
     await r(ctx, roll)
 
