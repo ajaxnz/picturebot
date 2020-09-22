@@ -1,7 +1,7 @@
 import random
 random.seed()
 import re
-
+import time
 from discord.ext import commands
 import discord
 
@@ -20,6 +20,8 @@ description = '''PictureDice (tm) die rolling and trust bot.
 Setup assumes the members of the game will have a role to identify them'''
 bot = commands.Bot(command_prefix='.', description=description)
 
+opus = discord.opus.load_opus('libopus.dylib')
+
 
 @bot.event
 async def on_ready():
@@ -30,9 +32,12 @@ async def on_ready():
 
 
 @bot.event
-async def on_command_error(error, ctx):
+async def on_command_error(ctx, error):
     if isinstance(error, commands.MissingRequiredArgument):
-        await ctx.send(ctx.message.channel, "I don't understand. Use .help for more info.")
+        await ctx.send("Error: {}\nTry .help for more info.".format(error))
+    else:
+        await ctx.send("Something odd went wrong. {}".format(error))
+
 
 
 #####
@@ -65,7 +70,7 @@ def getUser(ctx, username):
 
 
 @bot.command()
-async def setuptrust(ctx, totaltrust: int, role_or_player: str,
+async def setuptrust(ctx, totaltrust: int, role_or_player1: str,
                      player2:str=None,
                      player3:str=None,
                      player4:str=None,
@@ -84,9 +89,9 @@ name of a role or list of @users"""
         state = {}
         GLOBALstate[ctx.channel.name] = state
 
-        if role_or_player.startswith('<@'):
+        if role_or_player1.startswith('<@'):
             players = []
-            for username in [role_or_player, player2,player3,player4,player5,player6,player7,player8,player9,player10]:
+            for username in [role_or_player1, player2, player3, player4, player5, player6, player7, player8, player9, player10]:
                 if username:
                     user = getUser(ctx, username)
                     if user:
@@ -102,15 +107,15 @@ name of a role or list of @users"""
             userRoles = {r.name:r for r in ctx.message.author.roles}
             availableroles = {s for s in set(botRoles.keys()) | set(userRoles.keys()) if not s.startswith("@")}
             for r in availableroles:
-                if r.lower() == role_or_player.lower():
+                if r.lower() == role_or_player1.lower():
                     role = botRoles.get(r, userRoles.get(r))
                     break
             if not role:
                 await ctx.send(ctx.message.author.mention + " role {} doesn't appear to exist. Try {}".format(
-                        role_or_player, ", ".join(availableroles)))
+                        role_or_player1, ", ".join(availableroles)))
                 return
             players = [m for m in role.members if not m.bot and m.name != state['gm'] and m.status==discord.Status.online]
-            state['role']=role_or_player
+            state['role']=role_or_player1
         await ctx.message.delete()
         ctx.typing()
 
@@ -282,6 +287,43 @@ async def trust(ctx, player:str=None):
 
 
 
+@bot.command()
+async def tcard(ctx):
+    """Raises a t-card in the current channel"""
+    try:
+        await ctx.message.delete()
+
+        embedTcard = discord.Embed.from_dict({
+        })
+        embedTcard.set_image(url='http://geas.org.uk/wp-content/uploads/2020/08/tcard-1-e1597167776966.png')
+
+        await ctx.send("@here **T CARD T CARD T CARD T CARD**", embed=embedTcard)
+
+        ## now nav to parent group (if there is one, then first active voice channel)
+        categoryid = ctx.channel.category_id
+        #List[Tuple[Optional[CategoryChannel], List[abc.GuildChannel]]]
+        for cat, channels in ctx.guild.by_category():
+            print(categoryid, cat.id, cat.name, channels)
+            if cat.id != categoryid: continue
+            for channel in channels:
+                if channel.type == discord.ChannelType['voice']:
+                    print('got channel', channel.name)
+                    voicething = await channel.connect()
+                    print('connected')
+                    tcardaudio = discord.PCMAudio(open("EvilLaugh.wav", "rb"))
+                    print('setup sound')
+                    print('opus loaded')
+                    voicething.play(tcardaudio)
+                    print('playeded')
+                    while voicething.is_playing():
+                        time.sleep(1)
+                    await voicething.disconnect()
+
+
+    except Exception as e:
+        print('tcard exception',type(e),e)
+
+
 
 
 
@@ -296,16 +338,17 @@ async def trust(ctx, player:str=None):
 
 
 DEFAULTDIEFACES = [
-    'Profession',
+    'Adjective',
+    'Noun',
     'Past',
-    'Side Job',
-    'Special'
+    'Day Job',
+    'Team Role'
 ]
 FAILUREFACES = ['????', '!!!!']
 
 
 
-@bot.command()
+# @bot.command()
 async def setuppicturedice(ctx, diename:str, face1:str, face2:str, face3:str, face4:str, failure1:str=None, failure2:str=None):
     """Sets the labels for the dice.
 Give a name so you can customise the dice for your game, or even labels per person for serious personalisation
@@ -316,13 +359,48 @@ Use 'default' as a die name to change the default"""
     if not diename or diename =='0':
         diename = 'default'
 
-    thisdie = state.setdefault('dice',{})[diename] = [face1, face2, face3, face4]+FAILUREFACES
+    thisdie = state.setdefault('dice1',{})[diename] = [face1, face2, face3, face4]+FAILUREFACES
     if failure1:
         thisdie[4] = failure1
     if failure2:
         thisdie[5] = failure2
     await ctx.send(ctx.message.author.mention + " setup picturedice {} as {}".format(
             diename, ' '.join(thisdie)))
+
+@bot.command()
+async def setuppicturedice(ctx, diename:str, face1:str, face2:str, face3:str, face4:str, face5:str):
+    """Sets the labels for the dice.
+Give a name so you can customise the dice for your game, or even labels per person for serious personalisation
+Use 'default' as a die name to change the default"""
+    await ctx.message.delete()
+
+    state = GLOBALstate.setdefault(ctx.channel.name,{})
+    if not diename or diename =='0':
+        diename = 'default'
+
+    thisdie = state.setdefault('dice2',{})[diename] = [face1, face2, face3, face4, face5]
+    await ctx.send(ctx.message.author.mention + " setup picturedice {} as {}".format(
+            diename, ' '.join(thisdie)))
+
+# @bot.command()
+async def showpicturedice1(ctx):
+    """Show the picture dice sets defined"""
+    try:
+        await ctx.message.delete()
+
+        state = GLOBALstate.setdefault(ctx.channel.name,{})
+        picturedicestring = ''
+        for diename, diefaces in state.get('dice1',{}).items():
+            picturedicestring+='**{}** {}\n'.format(diename, ' '.join(diefaces))
+        picturedicestring+='**default** {}'.format(' '.join(DEFAULTDIEFACES))
+
+        await ctx.send("Current picture dice sets are\n"+picturedicestring)
+    except Exception as e:
+        print('picturediceshow',e)
+
+
+
+
 
 @bot.command()
 async def showpicturedice(ctx):
@@ -332,9 +410,9 @@ async def showpicturedice(ctx):
 
         state = GLOBALstate.setdefault(ctx.channel.name,{})
         picturedicestring = ''
-        for diename, diefaces in state.get('dice',{}).items():
-            picturedicestring+='**{}**: {}\n'.format(diename, ' '.join(diefaces))
-        picturedicestring+='system default: {}'.format(' '.join(DEFAULTDIEFACES+FAILUREFACES))
+        for diename, diefaces in state.get('dice2',{}).items():
+            picturedicestring+='**{}** {}\n'.format(diename, ' '.join(diefaces))
+        picturedicestring+='**default** {}'.format(' '.join(DEFAULTDIEFACES))
 
         await ctx.send("Current picture dice sets are\n"+picturedicestring)
     except Exception as e:
@@ -345,8 +423,51 @@ async def showpicturedice(ctx):
 
 
 
+
 @bot.command()
 async def rp(ctx, die1:str=None, die2:str=None):
+    """Rolls both picture dice  when you do something
+Give die names you've set up with picturedicesetup for personalised dice, it'll remember the last dice you rolled"""
+    try:
+        await ctx.message.delete()
+        state = GLOBALstate.setdefault(ctx.channel.name,{})
+        lastd1,lastd2 = state.get('lastrp2',{}).get(ctx.message.author.name,(None,None))
+
+        if lastd1 and not die1:
+            die1 = lastd1
+        if lastd2 and not die2:
+            die2 = lastd2
+        if die1 and not die2:
+            die2 = die1
+        if die1 or die2:
+            state.setdefault('lastrp2', {})[ctx.message.author.name] =  (die1, die2)
+
+        result1, fail1= rollPictureDie2(ctx, die1, FAILUREFACES[0])
+        result2, fail2= rollPictureDie2(ctx, die2, FAILUREFACES[1])
+        # print(result1,fail1,result2,fail2)
+        if fail1 and fail2 and result1==result2:
+            await ctx.send(ctx.message.author.mention + " failed, badly. Double **{}**".format(result1))
+        elif fail1 and fail2:
+            await ctx.send(ctx.message.author.mention + " failed, badly. **{}** and **{}**".format(result1, result2))
+        elif fail1 or fail2:
+            if fail1:
+                failres=result1
+                succeedres=result2
+            else:
+                failres=result2
+                succeedres=result1
+            await ctx.send(ctx.message.author.mention + " failed. **{}** but also **{}**".format(failres, succeedres))
+        elif result1 == result2:
+            await ctx.send(ctx.message.author.mention + " messy success! double **{}**".format(result1))
+        else:
+            await ctx.send(ctx.message.author.mention + " succeeded! **{}** or **{}** ".format(result1, result2))
+    except Exception as e:
+        print('rp',e)
+
+
+
+# @bot.command()
+async def rp1(ctx, die1:str=None, die2:str=None):
     """Rolls both picture dice, when you do something
 Give die names you've set up with picturedicesetup for personalised dice, it'll remember the last pair you rolled"""
     try:
@@ -358,6 +479,8 @@ Give die names you've set up with picturedicesetup for personalised dice, it'll 
             die1 = lastd1
         if lastd2 and not die2:
             die2 = lastd2
+        if die1 and not die2:
+            die2 = die1
         if die1 or die2:
             state.setdefault('lastrp', {})[ctx.message.author.name] =  (die1, die2)
 
@@ -377,7 +500,7 @@ Give die names you've set up with picturedicesetup for personalised dice, it'll 
         print('rp',e)
 
 
-@bot.command()
+# @bot.command()
 async def rh(ctx, die:str=None):
     """Rolls one picture die, for helping someone.
 Supply a die name to use that instead of the default, it'll remember what you rolled last"""
@@ -398,25 +521,44 @@ Supply a die name to use that instead of the default, it'll remember what you ro
         await ctx.send(ctx.message.author.mention + " successfully helped with: **{}**".format(result))
 
 
-def rollPictureDie(ctx, diename):
+def rollPictureDie(ctx, diename, faillevel=4, failsymbol=None):
     if not diename:
         diename = 'default'
     state = GLOBALstate.get(ctx.channel.name)
-    diefaces = DEFAULTDIEFACES + FAILUREFACES
-    for thisdie, thesediefaces in state.get('dice',{}).items():
+    diefaces = DEFAULTDIEFACES[:4] + FAILUREFACES
+    for thisdie, thesediefaces in state.get('dice1',{}).items():
         if thisdie.lower()=='default':
             diefaces = thesediefaces
             break
-    for thisdie, thesediefaces in state.get('dice',{}).items():
+    for thisdie, thesediefaces in state.get('dice1',{}).items():
         if thisdie.lower()==diename.lower():
             diefaces = thesediefaces
             break
 
     rollnum = random.randint(0,5)
     # print('rolling {} ({}) got {}'.format(diename, diefaces, rollnum))
+    if rollnum >= faillevel and failsymbol:
+        return failsymbol, True
+    return diefaces[rollnum], rollnum>=faillevel
 
 
-    return diefaces[rollnum], rollnum>=4
+def rollPictureDie2(ctx, diename, failsymbol):
+    if not diename:
+        diename = 'default'
+    state = GLOBALstate.get(ctx.channel.name)
+    diefaces = DEFAULTDIEFACES[:5] + [failsymbol]
+    for thisdie, thesediefaces in state.get('dice2',{}).items():
+        if thisdie.lower()=='default':
+            diefaces = thesediefaces
+            break
+    for thisdie, thesediefaces in state.get('dice2',{}).items():
+        if thisdie.lower()==diename.lower():
+            diefaces = thesediefaces
+            break
+
+    rollnum = random.randint(0,5)
+    # print('rolling {} ({}) got {}'.format(diename, diefaces, rollnum))
+    return diefaces[rollnum], rollnum>=5
 
 
 
@@ -460,11 +602,12 @@ async def r(ctx, roll: str):
             await ctx.send("Format has to be in #d# %s." % ctx.message.author.name)
             return
 
-        if int(numDice) > 500:
+        if int(numDice) > 100:
             await ctx.send("I cant roll that many dice %s." % ctx.message.author.name)
             return
 
-        await delete_messages(ctx.message, ctx.message.author)
+        # await delete_messages(ctx.message, ctx.message.author)
+        await ctx.message.delete()
 
         ctx.typing()
         await ctx.send("Rolling %s d%s for %s" % (numDice, diceVal, ctx.message.author.name))
@@ -488,7 +631,7 @@ async def r(ctx, roll: str):
         state = GLOBALstate.setdefault(ctx.channel.name,{})
         state.setdefault('lastroll',{})[ctx.message.author.name] = roll
     except Exception as e:
-        print(e)
+        print('r',e)
         return
 
 
@@ -523,11 +666,13 @@ async def rt(ctx, roll: str):
         await ctx.send("Format has to be in #d#t# %s." % ctx.message.author.name)
         return
 
-    if int(diceCount) > 500:
+    if int(diceCount) > 100:
         await ctx.send("I cant roll that many dice %s." % ctx.message.author.name)
         return
 
-    await delete_messages(ctx.message, ctx.message.author)
+    # await delete_messages(ctx.message, ctx.message.author)
+    await ctx.message.delete()
+
 
     ctx.typing()
     await ctx.send("Rolling %s d%s for %s with a success theshold %s %s" % (
