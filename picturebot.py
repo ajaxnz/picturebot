@@ -20,7 +20,11 @@ description = '''PictureDice (tm) die rolling and trust bot.
 Setup assumes the members of the game will have a role to identify them'''
 bot = commands.Bot(command_prefix='.', description=description)
 
-opus = discord.opus.load_opus('libopus.dylib')
+try:
+    opus = discord.opus.load_opus('libopus.dylib')
+except:
+    opus = discord.opus.load_opus('opus')
+
 
 
 @bot.event
@@ -310,7 +314,7 @@ async def tcard(ctx):
                     print('got channel', channel.name)
                     voicething = await channel.connect()
                     print('connected')
-                    tcardaudio = discord.PCMAudio(open("EvilLaugh.wav", "rb"))
+                    tcardaudio = discord.PCMAudio(open("tcard.wav", "rb"))
                     print('setup sound')
                     print('opus loaded')
                     voicething.play(tcardaudio)
