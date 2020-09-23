@@ -1,2 +1,4 @@
 /picturebot.tar.gz
 /credentials.py
+__pycache__
+.docker_temp*

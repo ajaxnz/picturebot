@@ -21,9 +21,14 @@ Setup assumes the members of the game will have a role to identify them'''
 bot = commands.Bot(command_prefix='.', description=description)
 
 try:
+    # mac path
     opus = discord.opus.load_opus('libopus.dylib')
 except:
-    opus = discord.opus.load_opus('opus')
+    try:
+        # docker path
+        opus = discord.opus.load_opus('/usr/lib/libopus.so.0')
+    except Exception as e:
+        print(e)
 
 
 
