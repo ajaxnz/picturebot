@@ -313,7 +313,7 @@ async def tcard(ctx):
         #List[Tuple[Optional[CategoryChannel], List[abc.GuildChannel]]]
         for cat, channels in ctx.guild.by_category():
             if not cat: continue
-            print(categoryid, cat.id, cat.name, channels)
+            # print(categoryid, cat.id, cat.name, channels)
             if cat.id != categoryid: continue
             for channel in channels:
                 if channel.type == discord.ChannelType['voice']:

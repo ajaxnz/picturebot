@@ -8,7 +8,7 @@ run with
 
 build docker image with
 - `docker image build --tag picturebot .`
-- save with `docker image save picturebot -o picturebot.tar.gz`
+- save with `docker image save picturebot -o ../**picturebot.tar.gz`
 - or run `docker run picturebot`
 
 setup sound
