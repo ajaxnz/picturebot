@@ -312,6 +312,7 @@ async def tcard(ctx):
         categoryid = ctx.channel.category_id
         #List[Tuple[Optional[CategoryChannel], List[abc.GuildChannel]]]
         for cat, channels in ctx.guild.by_category():
+            if not cat: continue
             print(categoryid, cat.id, cat.name, channels)
             if cat.id != categoryid: continue
             for channel in channels:
