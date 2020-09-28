@@ -355,6 +355,43 @@ async def tcard(ctx):
 
 
 
+@bot.command()
+async def hivivek(ctx):
+    """Says hi vivek in the nearest voice channel"""
+    try:
+        await ctx.message.delete()
+
+
+
+        ## now nav to parent group (if there is one, then first active voice channel)
+        categoryid = ctx.channel.category_id
+        category = ctx.guild.get_channel(categoryid)
+
+
+
+        await ctx.send("@vivek hi")
+
+
+        for channel in category.voice_channels:
+            print('got channel', channel.name)
+            voicething = await channel.connect()
+            print('connected')
+            tcardaudio = discord.PCMAudio(open("./hivivek/hivivek.wav", "rb"))
+            print('setup sound')
+            print('opus loaded')
+            voicething.play(tcardaudio)
+            print('playeded')
+            while voicething.is_playing():
+                time.sleep(1)
+            await voicething.disconnect()
+
+
+    except Exception as e:
+        print('hivivek exception',type(e),e)
+
+
+
+
 
 
 
