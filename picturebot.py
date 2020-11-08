@@ -505,7 +505,7 @@ async def showpicturedice(ctx):
         state = channelState(ctx)
         picturedicestring = ''
         for diename, diefaces in state.get('dice2',{}).items():
-            picturedicestring+='**{}** {}\n'.format(diename, ' '.join(f'"{diefaces}"'))
+            picturedicestring+='**{}** {}\n'.format(diename, ' '.join([f'"{d}"' for d in diefaces]))
         picturedicestring+='**default** {}'.format(' '.join(DEFAULTDIEFACES))
 
         await ctx.send("Current picture dice sets are\n"+picturedicestring)
