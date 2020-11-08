@@ -1,17 +1,16 @@
 import random
-random.seed()
 import re
 import time
 from discord.ext import commands
 import discord
-
 import credentials
+random.seed()
 
 
 ## permissions
 ## read_message_history (to delete input messages)
 
-GLOBALstate = {}
+GLOBALstate = {'users':{}}
 
 
 
@@ -60,23 +59,59 @@ async def on_command_error(ctx, error):
 
 def printStory(ctx):
     state = GLOBALstate.setdefault(ctx.channel.id, {})
-    return "\n".join(
-            ["{}: {}".format(state['players'][p].display_name, int(t)) for p, t in state.get('story',{}).items()])
+    storyscores = []
+    for p, t in state.get('story', {}).items():
+        storyscores.append("{}: {}".format(userName(p), int(t)))
+
+
+    return "\n".join(storyscores)
 
 def getUser(ctx, username):
     ## decodes the string username returns the user object
+    GLOBALstate.setdefault('users',{})
     try:
+        ## cache current user
+        if not GLOBALstate['users'].get(ctx.message.author.id,{}).get('object'):
+            GLOBALstate['users'][ctx.message.author.id]={
+                'mention':ctx.message.author.mention,
+                'userid':ctx.message.author.id,
+                'object':ctx.message.author,
+                'name':ctx.message.author.display_name
+            }
+
+
         # extract a member id
-        if not username.startswith("<@"):
+        if not username:
+            return
+        elif not username.startswith("<@"):
             raise
 
         userid = username.replace("<@", "").replace(">", "").replace('!', '')
         userid = int(userid)
-        user = ctx.guild.get_member(userid)
-        return user
-    except:
+        user = {'mention':username,
+                'userid':userid}
+        try:
+            user['object'] = bot.get_user(userid)
+            user['name'] = user['object'].display_name
+        except Exception as e:
+            print('get_user',e)
+        GLOBALstate['users'][userid]=user
+        return userid
+    except Exception as e:
+        print('getUser',e)
         return None
 
+def userName(userid):
+    user = GLOBALstate.get('users',{}).get(userid,{})
+    obj =  user.get('object')
+    if obj:
+        if obj.display_name != user.get('name'):
+            user['name'] = obj.display_name
+    return user.get('name',user.get('mention'))
+
+def userMention(userid):
+    user = GLOBALstate.get('users',{}).get(userid,{})
+    return user.get('mention')
 
 @bot.command()
 async def setupstory(ctx, totalstory: int, role_or_player1: str,
@@ -97,39 +132,22 @@ name of a role or list of @users"""
     try:
         state = GLOBALstate.setdefault(ctx.channel.id, {})
 
-        if role_or_player1.startswith('<@'):
-            players = []
-            for username in [role_or_player1, player2, player3, player4, player5, player6, player7, player8, player9, player10]:
-                if username:
-                    user = getUser(ctx, username)
-                    if user:
-                        players.append(user)
-                    else:
-                        await ctx.send(ctx.message.author.mention + " user {} doesn't appear to exist. @ them?".format(
-                                username))
-                        return
+        players = []
+        for username in [role_or_player1, player2, player3, player4, player5, player6, player7, player8, player9, player10]:
+            if username:
+                userid = getUser(ctx, username)
+                if userid:
+                    players.append(userid)
+                else:
+                    await ctx.send(ctx.message.author.mention + " user {} doesn't appear to exist. @ them?".format(
+                            username))
+                    return
 
-        else:
-            role = None
-            botRoles = {r.name:r for r in ctx.me.roles}
-            userRoles = {r.name:r for r in ctx.message.author.roles}
-            availableroles = {s for s in set(botRoles.keys()) | set(userRoles.keys()) if not s.startswith("@")}
-            for r in availableroles:
-                if r.lower() == role_or_player1.lower():
-                    role = botRoles.get(r, userRoles.get(r))
-                    break
-            if not role:
-                await ctx.send(ctx.message.author.mention + " role {} doesn't appear to exist. Try {}".format(
-                        role_or_player1, ", ".join(availableroles)))
-                return
-            players = [m for m in role.members if not m.bot and m.name != state['gm'] and m.status==discord.Status.online]
-            state['role']=role_or_player1
         await ctx.message.delete()
         ctx.typing()
 
-        state['gm']=ctx.message.author.name
-        state['players'] = {p.name:p for p in players}
-        state['story'] = {p.name:0 for p in players}
+        state['gm']=ctx.message.author.id
+        state['story'] = {p:0 for p in players}
 
         numPlayers = len(players)
         totalstory = abs(totalstory)
@@ -177,21 +195,19 @@ async def storyset(ctx, player:str, newstory:int):
         ctx.typing()
 
 
-        if ctx.message.author.name != state.get('gm'):
-            await ctx.send(ctx.message.author.mention + " You are not the GM. {} is.".format(state.get('gm')))
+        if ctx.message.author.id != state.get('gm'):
+            await ctx.send(ctx.message.author.mention + " You are not the GM. {} is.".format(userName(state.get('gm'))))
             return
         if newstory == MAGIC_REMOVE_NUMBER:
-            if sendee.name in state['story']:
-                state['story'].pop(sendee.name,None)
-                state['players'].pop(sendee.name)
-                await ctx.send(ctx.message.author.mention + " removed " + sendee.mention + " from this Story Point pool")
+            if sendee in state['story']:
+                state['story'].pop(sendee,None)
+                await ctx.send(ctx.message.author.mention + " removed " + userMention(sendee) + " from this Story Point pool")
             else:
-                await ctx.send(ctx.message.author.mention + " tried to remove " + sendee.display_name + " but they don't exist.")
+                await ctx.send(ctx.message.author.mention + " tried to remove " + userName(sendee) + " but they don't exist.")
         else:
             newstory = max(0,newstory)
-            state['story'][sendee.name]=newstory
-            state['players'][sendee.name]=sendee
-            await ctx.send(sendee.mention+" The GM set your Story Points to {}".format(
+            state['story'][sendee]=newstory
+            await ctx.send(userMention(sendee)+" The GM set your Story Points to {}".format(
                   newstory
             ))
 
@@ -239,31 +255,29 @@ async def story(ctx, player:str=None):
 
         # find the sender and their story points
         fromGM=False
-        sender = ctx.message.author
-        if sender.name not in state['story']:
-            if sender.name == state.get('gm'):
+        sender = ctx.message.author.id
+        if sender not in state['story']:
+            if sender == state.get('gm'):
                 fromGM = True
             else:
-                await ctx.send(ctx.message.author.mention + " you aren't set up with Story Points. Your GM can add you in with .storyset".format(
-                        state.get('role')
-                ))
+                await ctx.send(ctx.message.author.mention + " you aren't set up with Story Points. Your GM can add you in with .storyset")
                 return
-        elif state['story'][sender.name]<1:
+        elif state['story'][sender]<1:
             await ctx.send(ctx.message.author.mention + " you have no Story Points. No-one can help you now")
             return
 
         # find the person being given Story Points
-        if sendee.name not in state['story']:
-            if sendee.name == state.get('gm') and fromGM:
+        if sendee not in state['story']:
+            if sendee == state.get('gm') and fromGM:
                 await ctx.send(ctx.message.author.mention + " You are the GM. Why?"
                          )
-            elif sendee.name == state.get('gm'):
+            elif sendee == state.get('gm'):
                 await ctx.send(ctx.message.author.mention + " {} is the GM, they're not in this story. @ yourself to spend Story Points".format(
-                        sendee.name
+                        userName(sendee)
                 ))
             else:
                 await ctx.send(ctx.message.author.mention + " {} isn't set up with Story Points. Try one of these".format(
-                        sendee.display_name
+                        userName(sendee)
                 ))
                 await ctx.send(printStory(ctx))
 
@@ -271,21 +285,21 @@ async def story(ctx, player:str=None):
 
 
         # send it, handling self & gm cases
-        if sendee.name == sender.name:
+        if sendee == sender:
             await ctx.send(ctx.message.author.mention + " spent a Story Point. Awesome!".format(
-                    sendee.mention, state['story'][sender.name]
+                    userName(sender), state['story'][sender]
             ))
-            state['story'][sender.name]-=1
+            state['story'][sender]-=1
 
         elif fromGM:
-            await ctx.send(sendee.mention + " the GM gave you a Story Point!")
-            state['story'][sendee.name]+=1
+            await ctx.send(userMention(sendee) + " the GM gave you a Story Point!")
+            state['story'][sendee]+=1
 
         else:
-            state['story'][sender.name]-=1
-            state['story'][sendee.name]+=1
+            state['story'][sender]-=1
+            state['story'][sendee]+=1
             await ctx.send(ctx.message.author.mention + " gave {} a Story Point. Will you help them?".format(
-                    sendee.mention
+                    userMention(sendee)
             ))
 
         await ctx.send(printStory(ctx))
@@ -422,6 +436,8 @@ Give a name so you can customise the dice for your game, or even labels per pers
 Use 'default' as a die name to change the default"""
     await ctx.message.delete()
 
+    getUser(ctx, '')
+
     state = GLOBALstate.setdefault(ctx.channel.id,{})
     if not diename or diename =='0':
         diename = 'default'
@@ -508,8 +524,9 @@ Give die names you've set up with picturedicesetup for personalised dice, it'll 
             die2 = lastd2
         if die1 and not die2:
             die2 = die1
-        if die1 or die2:
-            state.setdefault('lastrp2', {})[ctx.message.author.name] =  (die1, die2)
+        if die1 != lastd1:
+            # yes, keeping die1 twice, cos I want to retain the option of two different dice
+            state.setdefault('lastrp2', {})[ctx.message.author.name] =  (die1, die1)
 
         result1, fail1= rollPictureDie2(ctx, die1, FAILUREFACES[0])
         result2, fail2= rollPictureDie2(ctx, die2, FAILUREFACES[1])
