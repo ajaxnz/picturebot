@@ -75,7 +75,6 @@ def channelState(ctx):
 def printStory(ctx):
     state = channelState(ctx)
     storyscores = []
-    print('printstory',state.get('story'))
     for p, t in state.get('story', {}).items():
         storyscores.append("{}: {}".format(userName(p), int(t)))
 
