@@ -56,10 +56,26 @@ async def on_command_error(ctx, error):
 #####
 #####  story point related functions
 
+def channelState(ctx):
+    ## cache current user
+    if not GLOBALstate['users'].get(ctx.message.author.id, {}).get('object'):
+        GLOBALstate['users'][ctx.message.author.id] = {
+            'mention': ctx.message.author.mention,
+            'userid': ctx.message.author.id,
+            'object': ctx.message.author,
+            'name': ctx.message.author.display_name
+        }
+
+    id = ctx.channel.category_id
+    if not id:
+        id = ctx.channel.id
+    return GLOBALstate.setdefault(id, {})
+
 
 def printStory(ctx):
-    state = GLOBALstate.setdefault(ctx.channel.id, {})
+    state = channelState(ctx)
     storyscores = []
+    print('printstory',state.get('story'))
     for p, t in state.get('story', {}).items():
         storyscores.append("{}: {}".format(userName(p), int(t)))
 
@@ -70,15 +86,6 @@ def getUser(ctx, username):
     ## decodes the string username returns the user object
     GLOBALstate.setdefault('users',{})
     try:
-        ## cache current user
-        if not GLOBALstate['users'].get(ctx.message.author.id,{}).get('object'):
-            GLOBALstate['users'][ctx.message.author.id]={
-                'mention':ctx.message.author.mention,
-                'userid':ctx.message.author.id,
-                'object':ctx.message.author,
-                'name':ctx.message.author.display_name
-            }
-
 
         # extract a member id
         if not username:
@@ -88,14 +95,19 @@ def getUser(ctx, username):
 
         userid = username.replace("<@", "").replace(">", "").replace('!', '')
         userid = int(userid)
+        user = GLOBALstate['users'].get(userid,{})
+        if user and user.get('object'):
+            return userid
+
         user = {'mention':username,
                 'userid':userid}
         try:
-            user['object'] = bot.get_user(userid)
-            user['name'] = user['object'].display_name
+            obj = bot.get_user(userid)
+            user['name'] = obj.display_name
         except Exception as e:
             print('get_user',e)
         GLOBALstate['users'][userid]=user
+        print(username, userid, user)
         return userid
     except Exception as e:
         print('getUser',e)
@@ -130,7 +142,7 @@ total story <value>
 name of a role or list of @users"""
 
     try:
-        state = GLOBALstate.setdefault(ctx.channel.id, {})
+        state = channelState(ctx)
 
         players = []
         for username in [role_or_player1, player2, player3, player4, player5, player6, player7, player8, player9, player10]:
@@ -180,7 +192,7 @@ async def storyset(ctx, player:str, newstory:int):
     # dm sender current story
     # print all story points to channel
     try:
-        state = GLOBALstate.setdefault(ctx.channel.id,{})
+        state = channelState(ctx)
 
         if not state.get('story'):
             await ctx.send(ctx.message.author.mention + " Story Points are not set up. The GM can set it up using .setupstory")
@@ -232,7 +244,7 @@ async def story(ctx, player:str=None):
     """Sends user <x> a story"""
 
     try:
-        state = GLOBALstate.setdefault(ctx.channel.id,{})
+        state = channelState(ctx)
         if not state.get('story'):
             await ctx.send(ctx.message.author.mention + " Story Points are not set up. The GM can set it up using .setupstory")
             return
@@ -438,7 +450,7 @@ Use 'default' as a die name to change the default"""
 
     getUser(ctx, '')
 
-    state = GLOBALstate.setdefault(ctx.channel.id,{})
+    state = channelState(ctx)
     if not diename or diename =='0':
         diename = 'default'
 
@@ -457,7 +469,7 @@ Give a name so you can customise the dice for your game, or even labels per pers
 Use 'default' as a die name to change the default"""
     await ctx.message.delete()
 
-    state = GLOBALstate.setdefault(ctx.channel.id,{})
+    state = channelState(ctx)
     if not diename or diename =='0':
         diename = 'default'
 
@@ -471,10 +483,10 @@ async def showpicturedice1(ctx):
     try:
         await ctx.message.delete()
 
-        state = GLOBALstate.setdefault(ctx.channel.id,{})
+        state = channelState(ctx)
         picturedicestring = ''
         for diename, diefaces in state.get('dice1',{}).items():
-            picturedicestring+='**{}** {}\n'.format(diename, ' '.join(diefaces))
+            picturedicestring+='**{}** {}\n'.format(diename, ' '.join(f'"{diefaces}"'))
         picturedicestring+='**default** {}'.format(' '.join(DEFAULTDIEFACES))
 
         await ctx.send("Current picture dice sets are\n"+picturedicestring)
@@ -491,10 +503,10 @@ async def showpicturedice(ctx):
     try:
         await ctx.message.delete()
 
-        state = GLOBALstate.setdefault(ctx.channel.id,{})
+        state = channelState(ctx)
         picturedicestring = ''
         for diename, diefaces in state.get('dice2',{}).items():
-            picturedicestring+='**{}** {}\n'.format(diename, ' '.join(diefaces))
+            picturedicestring+='**{}** {}\n'.format(diename, ' '.join(f'"{diefaces}"'))
         picturedicestring+='**default** {}'.format(' '.join(DEFAULTDIEFACES))
 
         await ctx.send("Current picture dice sets are\n"+picturedicestring)
@@ -513,7 +525,7 @@ async def rp(ctx, die1:str=None):
 Give die names you've set up with picturedicesetup for personalised dice, it'll remember the last dice you rolled"""
     try:
         await ctx.message.delete()
-        state = GLOBALstate.setdefault(ctx.channel.id,{})
+        state = channelState(ctx)
         lastd1,lastd2 = state.get('lastrp2',{}).get(ctx.message.author.name,(None,None))
 
         ## vestigial handling of 2 input die names
@@ -562,7 +574,7 @@ async def rp1(ctx, die1:str=None, die2:str=None):
 Give die names you've set up with picturedicesetup for personalised dice, it'll remember the last pair you rolled"""
     try:
         await ctx.message.delete()
-        state = GLOBALstate.setdefault(ctx.channel.id,{})
+        state = channelState(ctx)
         lastd1,lastd2 = state.get('lastrp',{}).get(ctx.message.author.name,(None,None))
 
         if lastd1 and not die1:
@@ -595,7 +607,7 @@ async def rh(ctx, die:str=None):
     """Rolls one picture die, for helping someone.
 Supply a die name to use that instead of the default, it'll remember what you rolled last"""
     await ctx.message.delete()
-    state = GLOBALstate.setdefault(ctx.channel.id,{})
+    state = channelState(ctx)
     lastd = state.get('lastrh', {}).get(ctx.message.author.name)
 
     if lastd and not die:
@@ -614,7 +626,7 @@ Supply a die name to use that instead of the default, it'll remember what you ro
 def rollPictureDie(ctx, diename, faillevel=4, failsymbol=None):
     if not diename:
         diename = 'default'
-    state = GLOBALstate.get(ctx.channel.id)
+    state = channelState(ctx)
     diefaces = DEFAULTDIEFACES[:4] + FAILUREFACES
     for thisdie, thesediefaces in state.get('dice1',{}).items():
         if thisdie.lower()=='default':
@@ -635,7 +647,7 @@ def rollPictureDie(ctx, diename, faillevel=4, failsymbol=None):
 def getDieFaces2(ctx, diename, dieface:int=None):
     if not diename:
         diename=''
-    state = GLOBALstate.get(ctx.channel.id)
+    state = channelState(ctx)
     diefaces = DEFAULTDIEFACES
     for thisdie, thesediefaces in state.get('dice2',{}).items():
         # channel default
@@ -729,7 +741,7 @@ async def r(ctx, roll: str):
             await ctx.send(
                 ctx.message.author.mention + "  :game_die:\n**Result:** " + resultString + "\n**Total:** " + str(resultTotal))
 
-        state = GLOBALstate.setdefault(ctx.channel.id,{})
+        state = channelState(ctx)
         state.setdefault('lastroll',{})[ctx.message.author.name] = roll
     except Exception as e:
         print('r',e)
@@ -739,7 +751,7 @@ async def r(ctx, roll: str):
 @bot.command()
 async def rr(ctx):
     """rerolls the last boring numbered dice you rolled"""
-    state = GLOBALstate.setdefault(ctx.channel.id, {})
+    state = channelState(ctx)
     roll = state.get('lastroll', {}).get(ctx.message.author.name,'')
 
     await r(ctx, roll)
