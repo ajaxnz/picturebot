@@ -1,10 +1,9 @@
-import random
+import secrets
 import re
 import time
 from discord.ext import commands
 import discord
 import credentials
-random.seed()
 
 
 ## permissions
@@ -167,8 +166,9 @@ name of a role or list of @users"""
             state['story'][p]+=int(intstory)
 
         randomstory = int(totalstory - (intstory * numPlayers))
-        for p in random.sample(state['story'].keys(),randomstory):
-            state['story'][p]+=1
+        for p in range(randomstory):
+            chosen = secrets.choice(state['story'].keys())
+            state['story'][chosen] += 1
 
         print(state)
 
@@ -636,7 +636,7 @@ def rollPictureDie(ctx, diename, faillevel=4, failsymbol=None):
             diefaces = thesediefaces
             break
 
-    rollnum = random.randint(0,5)
+    rollnum = secrets.randbelow(6)
     # print('rolling {} ({}) got {}'.format(diename, diefaces, rollnum))
     if rollnum >= faillevel and failsymbol:
         return failsymbol, True
@@ -668,7 +668,7 @@ def rollPictureDie2(ctx, diename, failsymbol):
     diefaces = getDieFaces2(ctx, diename)
     diefaces.append(failsymbol)
 
-    rollnum = random.randint(0,5)
+    rollnum = secrets.randbelow(6)
     # print('rolling {} ({}) got {}'.format(diename, diefaces, rollnum))
     return diefaces[rollnum], rollnum>=5
 
@@ -726,7 +726,7 @@ async def r(ctx, roll: str):
         rolls, limit = map(int, roll.split('d'))
 
         for r in range(rolls):
-            number = random.randint(1, limit)
+            number = secrets.randbelow(limit) + 1
             resultTotal = resultTotal + number
 
             if resultString == '':
@@ -793,7 +793,7 @@ async def rt(ctx, roll: str):
     try:
         for r in range(0, diceCount):
 
-            number = random.randint(1, diceValue)
+            number = secrets.randbelow(diceValue) + 1
             isRollSuccess = False
 
             if thresholdSign == '<':
