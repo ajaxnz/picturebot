@@ -1,4 +1,5 @@
 import secrets
+import copy
 import re
 import time
 from discord.ext import commands
@@ -166,9 +167,11 @@ name of a role or list of @users"""
             state['story'][p]+=int(intstory)
 
         randomstory = int(totalstory - (intstory * numPlayers))
+        candidates = copy.deepcopy(state['story'])
         for p in range(randomstory):
-            chosen = secrets.choice(state['story'].keys())
+            chosen = secrets.choice(candidates.keys())
             state['story'][chosen] += 1
+            candidates.pop(chosen, None)
 
         print(state)
 
