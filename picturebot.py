@@ -16,7 +16,9 @@ GLOBALstate = {'users':{}}
 description = '''PictureDice (tm) die rolling and Story Point bot.
 
 Setup assumes the members of the game will have a role to identify them'''
-bot = commands.Bot(command_prefix='.', description=description)
+bot = commands.Bot(command_prefix='.',
+                   description=description,
+                   intents=discord.Intents.all())
 
 try:
     # mac path
@@ -432,18 +434,18 @@ async def hivivek(ctx):
 
 
 DEFAULTDIEFACES = [
-    'Description',
-    'Title',
+    'Role',
+    'Awesome',
     'Past',
     'Other Thing',
     'Team Role'
 ]
-FAILUREFACES = ['????', '!!!!']
+FAILUREFACES = ['Trouble', 'Stopped']
 
 
 
-# @bot.command()
-async def setuppicturedice1(ctx, diename:str, face1:str, face2:str, face3:str, face4:str, failure1:str=None, failure2:str=None):
+@bot.command()
+async def setuppicturedice(ctx, diename:str, face1:str, face2:str, face3:str, face4:str, failure1:str=None, failure2:str=None):
     """Sets the labels for the dice.
 Give a name so you can customise the dice for your game, or even labels per person for serious personalisation
 Use 'default' as a die name to change the default"""
@@ -463,8 +465,8 @@ Use 'default' as a die name to change the default"""
     await ctx.send(ctx.message.author.mention + " setup picturedice {} as {}".format(
             diename, ' '.join(thisdie)))
 
-@bot.command()
-async def setuppicturedice(ctx, diename:str, face1:str, face2:str, face3:str, face4:str, face5:str):
+# @bot.command()
+async def setuppicturedice2(ctx, diename:str, face1:str, face2:str, face3:str, face4:str, face5:str):
     """Sets the labels for the dice.
 Give a name so you can customise the dice for your game, or even labels per person for serious personalisation
 Use 'default' as a die name to change the default"""
@@ -520,8 +522,8 @@ async def showpicturedice(ctx):
 
 
 
-@bot.command()
-async def rp(ctx, die1:str=None):
+# @bot.command()
+async def rp2(ctx, die1:str=None):
     """Rolls both picture dice  when you do something
 Give die names you've set up with picturedicesetup for personalised dice, it'll remember the last dice you rolled"""
     try:
@@ -603,6 +605,44 @@ Give die names you've set up with picturedicesetup for personalised dice, it'll 
         print('rp',e)
 
 
+
+@bot.command()
+async def rp(ctx, die1:str=None, die2:str=None):
+    """Rolls both picture dice, when you do something
+Give die names you've set up with picturedicesetup for personalised dice, it'll remember the last pair you rolled"""
+    try:
+        await ctx.message.delete()
+        state = channelState(ctx)
+        lastd1,lastd2 = state.get('lastrp',{}).get(ctx.message.author.name,(None,None))
+
+        if lastd1 and not die1:
+            die1 = lastd1
+        if lastd2 and not die2:
+            die2 = lastd2
+        if die1 and not die2:
+            die2 = die1
+        if die1 or die2:
+            state.setdefault('lastrp', {})[ctx.message.author.name] =  (die1, die2)
+
+        result1, trouble1, fail1= rollPictureDie(ctx, die1)
+        result2, trouble2, fail2= rollPictureDie(ctx, die2)
+        if (fail1 or fail2) and (trouble1 or trouble2):
+            await ctx.send(ctx.message.author.mention + " was stopped. And something else went wrong too **{}** and **{}**".format(result1, result2))
+        elif fail1 and fail2:
+            await ctx.send(ctx.message.author.mention + " was stopped, completely. **{}** and **{}**".format(result1, result2))
+        elif fail1 or fail2:
+            await ctx.send(ctx.message.author.mention + " was stopped, whilst trying something cool. **{}** and **{}**".format(result1, result2))
+        elif trouble1 and trouble2:
+            await ctx.send(ctx.message.author.mention + " was stopped. So much trouble. **{}** and **{}**".format(result1, result2))
+        elif trouble1 or trouble2:
+            await ctx.send(ctx.message.author.mention + " succeeded, but there are consequences. **{}** and **{}**".format(result1, result2))
+        elif result1 == result2:
+            await ctx.send(ctx.message.author.mention + " succeeded! **{}**".format(result1))
+        else:
+            await ctx.send(ctx.message.author.mention + " succeeded! **{}** or **{}** ".format(result1, result2))
+    except Exception as e:
+        print('rp',e)
+
 # @bot.command()
 async def rh(ctx, die:str=None):
     """Rolls one picture die, for helping someone.
@@ -624,7 +664,7 @@ Supply a die name to use that instead of the default, it'll remember what you ro
         await ctx.send(ctx.message.author.mention + " successfully helped with: **{}**".format(result))
 
 
-def rollPictureDie(ctx, diename, faillevel=4, failsymbol=None):
+def rollPictureDie(ctx, diename, troublelevel=4, faillevel=5):
     if not diename:
         diename = 'default'
     state = channelState(ctx)
@@ -640,9 +680,7 @@ def rollPictureDie(ctx, diename, faillevel=4, failsymbol=None):
 
     rollnum = secrets.randbelow(6)
     # print('rolling {} ({}) got {}'.format(diename, diefaces, rollnum))
-    if rollnum >= faillevel and failsymbol:
-        return failsymbol, True
-    return diefaces[rollnum], rollnum>=faillevel
+    return diefaces[rollnum], rollnum==troublelevel, rollnum==faillevel
 
 
 def getDieFaces2(ctx, diename, dieface:int=None):
