@@ -13,25 +13,32 @@ subs: https://downsub.com/
 '''
 parser = argparse.ArgumentParser(
                     prog='Movie name fixer for plex',
-                    description='What the program does',
-                    epilog='Text at the bottom of help')
+                    description='Use -e -l tha .',
+                    epilog="""Download subtitles from https://downsub.com/, movies from somewhere https://www.y2down.app/ ?
+path handling is broken, just run from the folder with the movies
+Use -e -l tha .""")
 parser.add_argument('folder')           # positional argument
-parser.add_argument('-v', '--season', type=int, default=1)
-parser.add_argument('-l','--language', default='jpn')
+# parser.add_argument('-v', '--season', type=int, default=1)
+parser.add_argument('-v', '--verbose', action='store_true')
+parser.add_argument('-l','--language', default='tha')
 parser.add_argument('-r', '--rename', action='store_true')
 parser.add_argument('-e','--encode', action='store_true')
-parser.add_argument('-m', '--multipart', action='store_true')      # option that takes a value
+# parser.add_argument('-m', '--multipart', action='store_true')      # option that takes a value
 args = parser.parse_args()
 
 
 multipartRegexes = [(r'(\d+)4$', r'part\1')]
 episodeRegex = [(r'ep(\d+) ', r'S01E\1 ')]
-junkStrings = ['english','eng','sub','downsub','com','down','｜','⧸']
+junkStrings = ['english','eng','sub','downsub','com','down','｜','⧸','ตอนจบ']
 
 
 def main(args):
     files = os.listdir(args.folder)
     filepairs = linkFilePairs(files)
+
+    if args.verbose:
+        print(filepairs)
+        dienow
 
     # tidyup names
     for key, details in filepairs.items():
