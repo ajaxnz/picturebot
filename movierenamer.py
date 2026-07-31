@@ -27,9 +27,9 @@ parser.add_argument('-e','--encode', action='store_true')
 args = parser.parse_args()
 
 
-multipartRegexes = [(r'(\d+)4$', r'part\1')]
-episodeRegex = [(r'ep(\d+) ', r'S01E\1 ')]
-junkStrings = ['english','eng','sub','downsub','com','down','｜','⧸','ตอนจบ']
+multipartRegexes = [r'(\d+)4$']
+episodeRegex = [r'ep(\d+) ']
+junkStrings = ['english','eng','sub','downsub','com','down','｜','⧸','ตอนจบ','ตอ']
 
 
 def main(args):
@@ -54,17 +54,18 @@ def tidyFileNames(key, details):
     sub = details.get('sub')
     newkey = key
     for rule in episodeRegex:
-        newkey, subs = re.subn(rule[0], rule[1], key)
+        episode = re.findall(rule, key)[0]
+        details['episode'] = f"S01E{episode.zfill(2)} "
+        newkey, subs = re.subn(rule, details['episode'], key)
         if subs:
-            episode = re.findall(rule[0], key)[0]
-            details['episode'] = episode
             break
     key = newkey
     for rule in multipartRegexes:
-        newkey, subs = re.subn(rule[0], rule[1], key)
+        part = re.findall(rule, key)[0]
+        details['part'] = f"part{part}"
+        tmpkey, subs = re.subn(rule, details['part'], key)
         if subs:
-            part = re.findall(rule[0], key)[0]
-            details['part'] = part
+            newkey=tmpkey
             break
     details['newkey'] = newkey
     dir, file, ext = splitFile(mov)
@@ -75,7 +76,7 @@ def tidyFileNames(key, details):
 
 
 def applyFileChanges(args, details):
-    print(f"{details['newkey']}: Episode {details.get('episode')} Part {details.get('part')}")
+    print(f"{details['newkey']}: Episode {details.get('episode')} {details.get('part')}")
     print(f"     mov {details['mov']} sub {details.get('sub')}")
 
     newkey = details['newkey']
